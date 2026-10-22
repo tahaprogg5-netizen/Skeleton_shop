@@ -101,8 +101,9 @@
     <section id="admin" class="page hidden">
       <h2 class="text-2xl font-black mb-5">پنل مدیریت</h2>
       <div id="adminLogin" class="panel p-5 max-w-md">
-        <p class="text-gray-400 mb-4">رمز عبور مدیریت را وارد کن.</p>
-        <input id="adminPassword" type="password" class="field mb-4" placeholder="رمز عبور">
+        <p class="text-gray-400 mb-4">برای ورود به پنل مدیریت، ایمیل و رمز عبور مدیر را وارد کن.</p>
+        <input id="adminEmail" type="email" class="field mb-3" placeholder="ایمیل مدیر" autocomplete="username" dir="ltr">
+        <input id="adminPassword" type="password" class="field mb-4" placeholder="رمز عبور" autocomplete="current-password">
         <button class="btn primary w-full" onclick="loginAdmin()">ورود به پنل</button>
         <p id="loginError" class="text-red-400 text-sm mt-3"></p>
       </div>
@@ -240,14 +241,26 @@ async function trackOrder(){
  result.innerHTML='<div class="panel p-4"><p>کد: <strong>'+esc(o.order_code||code)+'</strong></p><p class="mt-2">وضعیت: <strong class="text-purple-300">'+esc(labels[o.status]||o.status||"نامشخص")+'</strong></p><p class="mt-2">مبلغ: '+fmt(o.total_toman??o.total)+'</p>'+(deliveryUrl?'<a class="btn primary inline-block mt-4" href="'+esc(deliveryUrl)+'" target="_blank" rel="noopener noreferrer" download>دریافت فایل محصول</a>':'<p class="text-sm text-gray-400 mt-3">هنوز فایلی برای این سفارش ثبت نشده است.</p>')+'</div>';
 }
 async function loginAdmin(){
- const email=document.getElementById("adminEmail")?.value.trim(),password=document.getElementById("adminPassword").value;
+ const email=(document.getElementById("adminEmail")?.value||"").trim();
+ const password=document.getElementById("adminPassword")?.value||"";
  const errorEl=document.getElementById("loginError");
+ const button=document.querySelector('#adminLogin button[onclick="loginAdmin()"]');
  if(!email||!password){errorEl.textContent="ایمیل و رمز عبور را وارد کن.";return;}
- const {data,error}=await db.auth.signInWithPassword({email,password});
- if(error){errorEl.textContent="ورود ناموفق بود. ایمیل/رمز یا مجوز مدیر را بررسی کن.";return;}
- const {data:allowed,error:allowError}=await db.from("admin_users").select("user_id").eq("user_id",data.user.id).maybeSingle();
- if(allowError||!allowed){await db.auth.signOut();errorEl.textContent="این حساب هنوز در فهرست مدیران مجاز نیست.";return;}
- adminUser=data.user;errorEl.textContent="";document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");await loadAdmin();
+ if(button){button.disabled=true;button.textContent="در حال ورود…";}
+ errorEl.textContent="";
+ try{
+  const {data,error}=await db.auth.signInWithPassword({email,password});
+  if(error){errorEl.textContent="ورود ناموفق بود: "+(error.message||"ایمیل یا رمز عبور را بررسی کن.");return;}
+  if(!data?.user){errorEl.textContent="ورود انجام نشد؛ دوباره تلاش کن.";return;}
+  const {data:allowed,error:allowError}=await db.from("admin_users").select("user_id").eq("user_id",data.user.id).maybeSingle();
+  if(allowError){await db.auth.signOut();errorEl.textContent="بررسی مجوز مدیر ناموفق بود. اتصال پایگاه داده را بررسی کن.";return;}
+  if(!allowed){await db.auth.signOut();errorEl.textContent="این حساب در فهرست مدیران مجاز نیست.";return;}
+  adminUser=data.user;
+  document.getElementById("adminLogin").classList.add("hidden");
+  document.getElementById("adminPanel").classList.remove("hidden");
+  await loadAdmin();
+ }catch(e){errorEl.textContent="خطا در اتصال: "+(e?.message||"اتصال را بررسی کن.");}
+ finally{if(button){button.disabled=false;button.textContent="ورود به پنل";}}
 }
 async function logoutAdmin(){await db.auth.signOut();adminUser=null;document.getElementById("adminLogin").classList.remove("hidden");document.getElementById("adminPanel").classList.add("hidden");}
 async function loadAdmin(){
@@ -310,7 +323,7 @@ async function savePaymentSettings(){
  const {error}=await db.from("payment_settings").update({card_number,cardholder_name,updated_at:new Date().toISOString()}).eq("id",1);
  if(error){notify("ذخیره تنظیمات ناموفق بود: "+error.message);return;}paymentSettings={card_number,cardholder_name};notify("تنظیمات پرداخت ذخیره شد.");
 }
-document.getElementById("adminEmail") || (function(){const pw=document.getElementById("adminPassword");if(pw&&!document.getElementById("adminEmail")){const input=document.createElement("input");input.id="adminEmail";input.type="email";input.className="field mb-3";input.placeholder="ایمیل مدیر";pw.parentNode.insertBefore(input,pw);}})();
+
 (async function init(){saveCart();await loadProducts();const {data}=await db.auth.getSession();if(data?.session){const u=data.session.user;const {data:ok}=await db.from("admin_users").select("user_id").eq("user_id",u.id).maybeSingle();if(ok){adminUser=u;document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");}}})();
 
 </script>
