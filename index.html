@@ -289,7 +289,7 @@ function renderAdminProducts(list){
 }
 function telegramReadyLink(order){
  const raw=String(order.customer_contact||"").trim();
- const username=raw.replace(/^@/,"");
+ const username=raw.replace(/^@+|@+$/g,"");
  if(!/^[A-Za-z0-9_]{5,32}$/.test(username)) return "";
  const items=Array.isArray(order.items)?order.items:[];
  const itemNames=items.map(i=>{const p=products.find(p=>String(p.id)===String(i.id));return (p?p.name:"محصول حذف‌شده")+" × "+(Number(i.quantity)||1);}).join("، ")||"محصولات سفارش";
