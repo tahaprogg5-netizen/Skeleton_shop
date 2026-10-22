@@ -192,20 +192,12 @@
 (() => {
   const trigger = document.getElementById("footerAdminTrigger");
   if (!trigger) return;
-  let taps = 0;
-  let resetTimer;
   trigger.style.cursor = "default";
   trigger.addEventListener("click", () => {
-    taps++;
-    clearTimeout(resetTimer);
-    resetTimer = setTimeout(() => { taps = 0; }, 1800);
-    if (taps >= 5) {
-      taps = 0;
-      if (typeof showPage === "function") showPage("admin");
-      else location.hash = "admin";
-    }
+    if (typeof showPage === "function") showPage("admin");
+    else location.hash = "admin";
   });
-})();
+
 </script>
 <script>
 
