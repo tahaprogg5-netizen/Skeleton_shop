@@ -184,9 +184,29 @@
     </div>
   </section>
   <footer class="text-center text-gray-500 text-sm p-8 mt-8 border-t border-white/10">
-    اسکلتون شاپ · فروشگاه محصولات دیجیتال
+    <span id="footerAdminTrigger" title="">اسکلتون شاپ · فروشگاه محصولات دیجیتال</span>
   </footer>
 
+
+<script>
+(() => {
+  const trigger = document.getElementById("footerAdminTrigger");
+  if (!trigger) return;
+  let taps = 0;
+  let resetTimer;
+  trigger.style.cursor = "default";
+  trigger.addEventListener("click", () => {
+    taps++;
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => { taps = 0; }, 1800);
+    if (taps >= 5) {
+      taps = 0;
+      if (typeof showPage === "function") showPage("admin");
+      else location.hash = "admin";
+    }
+  });
+})();
+</script>
 <script>
 
 const SUPABASE_URL = "https://diapjpkvqaseztvregrq.supabase.co";
