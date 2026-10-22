@@ -91,6 +91,7 @@
       <div class="panel p-5 max-w-xl">
         <label class="block mb-2">کد سفارش</label>
         <input id="trackingCode" class="field mb-4" placeholder="کد سفارش را وارد کن">
+        <label class="block mb-2">راه ارتباطی هنگام ثبت سفارش</label><input id="trackingContact" class="field mb-4" placeholder="شماره تماس یا شناسه">
         <button class="btn primary" onclick="trackOrder()">بررسی وضعیت</button>
         <div id="trackingResult" class="mt-5"></div>
       </div>
@@ -151,373 +152,139 @@
   </footer>
 
 <script>
-  const ADMIN_PASSWORD = "CHANGE_THIS_PASSWORD";
 
-  const defaultProducts = [
-    {
-      id: "p1",
-      name: "شناسنامه پنکه",
-      description: "محصول دیجیتال نمونه",
-      price: 0,
-      image: "",
-      download: "",
-      active: true
-    },
-    {
-      id: "p2",
-      name: "کارت پایان خدمت پنکه",
-      description: "محصول دیجیتال نمونه",
-      price: 50000,
-      image: "",
-      download: "",
-      active: true
-    }
-  ];
+const SUPABASE_URL = "https://diapjpkvqaseztvregrq.supabase.co";
+const SUPABASE_KEY = "sb_publishable_lQWWNGOGupsMxLPwPlsDag__GtZEdWZ";
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let products = [];
+let cart = JSON.parse(localStorage.getItem("skl_cart") || "[]");
+let adminUser = null;
+let paymentSettings = {cardholder_name:"",card_number:""};
+const fmt = n => new Intl.NumberFormat("fa-IR").format(Number(n || 0)) + " تومان";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function notify(message){ alert(message); }
+function showPage(id){
+ document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));
+ const page=document.getElementById(id); if(page) page.classList.remove("hidden");
+ document.querySelectorAll(".navbtn").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+ if(id==="cart") renderCart();
+ if(id==="checkout") renderCheckout();
+ if(id==="admin" && adminUser) loadAdmin();
+}
+document.querySelectorAll(".navbtn").forEach(b=>b.addEventListener("click",()=>showPage(b.dataset.page)));
+async function loadProducts(){
+ const grid=document.getElementById("productsGrid");
+ grid.innerHTML='<div class="panel p-5 text-gray-400">در حال دریافت محصولات…</div>';
+ const {data,error}=await db.from("products").select("id,name,description,price,image_url,download_url,active").eq("active",true).order("created_at",{ascending:false});
+ if(error){grid.innerHTML='<div class="panel p-5 text-red-300">اتصال محصولات ناموفق بود: '+esc(error.message)+'</div>';return;}
+ products=data||[];
+ renderProducts();
+}
+function renderProducts(){
+ const grid=document.getElementById("productsGrid");
+ if(!products.length){grid.innerHTML='<div class="panel p-6 text-gray-400">هنوز محصولی ثبت نشده است.</div>';return;}
+ grid.innerHTML=products.map(p=>'<article class="panel overflow-hidden flex flex-col">'+(p.image_url?'<img src="'+esc(p.image_url)+'" alt="'+esc(p.name)+'" class="w-full h-44 object-cover">':'<div class="h-36 flex items-center justify-center bg-purple-950/30 text-5xl">💀</div>')+'<div class="p-5 flex flex-col flex-1"><h3 class="font-black text-lg mb-2">'+esc(p.name)+'</h3><p class="text-sm text-gray-400 mb-4 flex-1">'+esc(p.description||"محصول دیجیتال")+'</p><div class="flex items-center justify-between gap-2"><strong class="text-purple-400">'+fmt(p.price)+'</strong><button class="btn primary" onclick="addToCart(\''+String(p.id)+'\')">افزودن</button></div></div></article>').join("");
+}
+function saveCart(){localStorage.setItem("skl_cart",JSON.stringify(cart));document.getElementById("cartCount").textContent=String(cart.reduce((s,x)=>s+x.qty,0));}
+function addToCart(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;const row=cart.find(x=>String(x.id)===String(id));if(row)row.qty++;else cart.push({id:p.id,qty:1});saveCart();notify("به سبد خرید اضافه شد.");}
+function cartRows(){return cart.map(row=>{const p=products.find(x=>String(x.id)===String(row.id));return p?{...p,qty:row.qty}:null;}).filter(Boolean);}
+function renderCart(){
+ const rows=cartRows(), el=document.getElementById("cartItems");
+ if(!rows.length)el.innerHTML='<p class="text-gray-400">سبد خرید خالی است.</p>';
+ else el.innerHTML=rows.map(p=>'<div class="flex flex-wrap items-center justify-between gap-3 py-3 border-b border-white/10"><div><strong>'+esc(p.name)+'</strong><p class="text-sm text-gray-400">'+fmt(p.price)+' × '+fmt(p.qty).replace(" تومان","")+'</p></div><div class="flex gap-2 items-center"><button class="btn secondary" onclick="changeQty(\''+String(p.id)+'\',-1)">−</button><span>'+p.qty+'</span><button class="btn secondary" onclick="changeQty(\''+String(p.id)+'\',1)">+</button><button class="btn danger" onclick="removeCart(\''+String(p.id)+'\')">حذف</button></div></div>').join("");
+ const total=rows.reduce((s,p)=>s+Number(p.price)*p.qty,0);document.getElementById("cartTotal").textContent=fmt(total);document.getElementById("checkoutTotal").textContent=fmt(total);saveCart();
+}
+function changeQty(id,d){const r=cart.find(x=>String(x.id)===String(id));if(r){r.qty+=d;if(r.qty<1)cart=cart.filter(x=>String(x.id)!==String(id));saveCart();renderCart();}}
+function removeCart(id){cart=cart.filter(x=>String(x.id)!==String(id));saveCart();renderCart();}
+async function renderCheckout(){
+ const rows=cartRows();const total=rows.reduce((s,p)=>s+Number(p.price)*p.qty,0);document.getElementById("checkoutTotal").textContent=fmt(total);
+ const details=document.getElementById("paymentDetails");if(details)details.classList.add("hidden");
+ const {data,error}=await db.from("payment_settings").select("cardholder_name,card_number").eq("id",1).maybeSingle();
+ if(error){notify("تنظیمات پرداخت دریافت نشد.");return;}
+ paymentSettings=data||paymentSettings;
+ const free=document.getElementById("freeNotice");if(free)free.classList.toggle("hidden",total!==0);
+ if(total>0 && paymentSettings.card_number){document.getElementById("cardOwner").textContent=paymentSettings.cardholder_name||"";document.getElementById("cardNumber").textContent=paymentSettings.card_number;details.classList.remove("hidden");}
+}
+async function copyCard(){try{await navigator.clipboard.writeText(paymentSettings.card_number||"");notify("شماره کارت کپی شد.");}catch(e){notify("کپی خودکار ممکن نیست؛ شماره کارت را انتخاب و کپی کن.");}}
+async function placeOrder(){
+ const name=document.getElementById("customerName").value.trim(),contact=document.getElementById("customerContact").value.trim(),file=document.getElementById("receipt").files[0],rows=cartRows();
+ if(!name||!contact){notify("نام و راه ارتباطی را وارد کن.");return;}if(!rows.length){notify("سبد خرید خالی است.");return;}
+ if(file && file.size>5*1024*1024){notify("حجم رسید نباید بیشتر از ۵ مگابایت باشد.");return;}
+ let receiptPath=null;
+ if(file){
+  const ext=(file.name.split(".").pop()||"jpg").toLowerCase();if(!["jpg","jpeg","png","webp","pdf"].includes(ext)){notify("فرمت رسید باید JPG، PNG، WEBP یا PDF باشد.");return;}
+  receiptPath=Date.now()+"-"+Math.random().toString(36).slice(2)+"."+ext;
+  const {error:upErr}=await db.storage.from("receipts").upload(receiptPath,file,{contentType:file.type||"application/octet-stream",upsert:false});
+  if(upErr){notify("بارگذاری رسید ناموفق بود: "+upErr.message);return;}
+ }
+ const items=rows.map(p=>({id:p.id,quantity:p.qty}));
+ const {data,error}=await db.rpc("create_store_order",{p_customer_name:name,p_customer_contact:contact,p_items:items,p_receipt_path:receiptPath});
+ if(error){notify("ثبت سفارش ناموفق بود: "+error.message);return;}
+ const result=Array.isArray(data)?data[0]:data;
+ if(!result || !result.order_code){notify("سفارش ایجاد شد اما کد سفارش از سرور دریافت نشد. با مدیر تماس بگیر.");return;}
+ document.getElementById("successCode").textContent=result.order_code;
+ cart=[];saveCart();document.getElementById("customerName").value="";document.getElementById("customerContact").value="";document.getElementById("paymentReference").value="";document.getElementById("receipt").value="";
+ showPage("success");
+}
+async function trackOrder(){
+ const code=document.getElementById("trackingCode").value.trim(),contact=document.getElementById("trackingContact")?.value.trim();
+ const result=document.getElementById("trackingResult");
+ if(!code||!contact){result.innerHTML='<p class="text-red-300">کد سفارش و راه ارتباطی را وارد کن.</p>';return;}
+ result.innerHTML='<p class="text-gray-400">در حال بررسی…</p>';
+ const {data,error}=await db.rpc("track_store_order",{p_order_code:code,p_customer_contact:contact});
+ if(error||!data||!(Array.isArray(data)?data.length:true)){result.innerHTML='<p class="text-red-300">سفارشی با این کد و اطلاعات پیدا نشد.</p>';return;}
+ const o=Array.isArray(data)?data[0]:data;const labels={pending:"در انتظار بررسی",approved:"تأیید شده",rejected:"رد شده",delivered:"تحویل شده"};
+ result.innerHTML='<div class="panel p-4"><p>کد: <strong>'+esc(o.order_code||code)+'</strong></p><p class="mt-2">وضعیت: <strong class="text-purple-300">'+esc(labels[o.status]||o.status||"نامشخص")+'</strong></p><p class="mt-2">مبلغ: '+fmt(o.total)+'</p></div>';
+}
+async function loginAdmin(){
+ const email=document.getElementById("adminEmail")?.value.trim(),password=document.getElementById("adminPassword").value;
+ const errorEl=document.getElementById("loginError");
+ if(!email||!password){errorEl.textContent="ایمیل و رمز عبور را وارد کن.";return;}
+ const {data,error}=await db.auth.signInWithPassword({email,password});
+ if(error){errorEl.textContent="ورود ناموفق بود. ایمیل/رمز یا مجوز مدیر را بررسی کن.";return;}
+ const {data:allowed,error:allowError}=await db.from("admin_users").select("user_id").eq("user_id",data.user.id).maybeSingle();
+ if(allowError||!allowed){await db.auth.signOut();errorEl.textContent="این حساب هنوز در فهرست مدیران مجاز نیست.";return;}
+ adminUser=data.user;errorEl.textContent="";document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");await loadAdmin();
+}
+async function logoutAdmin(){await db.auth.signOut();adminUser=null;document.getElementById("adminLogin").classList.remove("hidden");document.getElementById("adminPanel").classList.add("hidden");}
+async function loadAdmin(){
+ if(!adminUser)return;
+ const [pr,or,ps]=await Promise.all([db.from("products").select("*").order("created_at",{ascending:false}),db.from("orders").select("*").order("created_at",{ascending:false}),db.from("payment_settings").select("*").eq("id",1).maybeSingle()]);
+ if(pr.error)notify("خواندن محصولات مدیر ناموفق بود: "+pr.error.message);else renderAdminProducts(pr.data||[]);
+ if(or.error)document.getElementById("adminOrders").innerHTML='<p class="text-red-300">دریافت سفارش‌ها ناموفق بود: '+esc(or.error.message)+'</p>';else renderAdminOrders(or.data||[]);
+ if(ps.data){document.getElementById("editCardNumber").value=ps.data.card_number||"";document.getElementById("editCardOwner").value=ps.data.cardholder_name||"";}
+}
+function renderAdminProducts(list){
+ const existing=document.getElementById("adminProductList");if(existing)existing.remove();
+ const wrap=document.createElement("div");wrap.id="adminProductList";wrap.className="panel p-5 mb-5";
+ wrap.innerHTML='<h3 class="font-bold text-lg mb-4">مدیریت محصولات</h3>'+(list.length?list.map(p=>'<div class="flex flex-wrap justify-between gap-3 py-3 border-b border-white/10"><div><strong>'+esc(p.name)+'</strong><p class="text-sm text-gray-400">'+fmt(p.price)+' · '+(p.active?"فعال":"غیرفعال")+'</p></div><div class="flex gap-2"><button class="btn secondary" onclick="toggleProduct(\''+p.id+'\','+(!p.active)+')">'+(p.active?"غیرفعال‌کردن":"فعال‌کردن")+'</button><button class="btn danger" onclick="deleteProduct(\''+p.id+'\')">حذف</button></div></div>').join(""):'<p class="text-gray-400">محصولی نیست.</p>');
+ document.getElementById("adminPanel").insertBefore(wrap,document.getElementById("adminPanel").firstChild);
+}
+function renderAdminOrders(orders){
+ const el=document.getElementById("adminOrders"),labels={pending:"در انتظار بررسی",approved:"تأیید شده",rejected:"رد شده",delivered:"تحویل شده"};
+ if(!orders.length){el.innerHTML='<p class="text-gray-400">هنوز سفارشی ثبت نشده.</p>';return;}
+ el.innerHTML=orders.map(o=>'<article class="border border-white/10 rounded-xl p-4"><div class="flex flex-wrap justify-between gap-2"><strong>'+esc(o.order_code)+'</strong><span class="text-purple-300">'+fmt(o.total)+'</span></div><p class="text-sm text-gray-300 mt-2">'+esc(o.customer_name)+' · '+esc(o.customer_contact)+'</p><p class="text-sm text-gray-400 mt-1">'+new Date(o.created_at).toLocaleString("fa-IR")+'</p><p class="mt-2">وضعیت: '+esc(labels[o.status]||o.status)+'</p>'+(o.receipt_path?'<button class="btn secondary mt-3" onclick="viewReceipt(\''+esc(o.receipt_path)+'\')">مشاهده رسید</button>':'<p class="text-xs text-gray-500 mt-2">رسیدی بارگذاری نشده.</p>')+'<div class="flex flex-wrap gap-2 mt-3"><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'approved\')">تأیید</button><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'rejected\')">رد</button><button class="btn primary" onclick="changeStatus(\''+o.id+'\',\'delivered\')">تحویل شد</button></div></article>').join("");
+}
+async function viewReceipt(path){const {data,error}=await db.storage.from("receipts").createSignedUrl(path,60);if(error){notify("نمایش رسید ممکن نیست: "+error.message);return;}window.open(data.signedUrl,"_blank","noopener");}
+async function addProduct(){
+ if(!adminUser)return;const name=document.getElementById("newName").value.trim(),description=document.getElementById("newDescription").value.trim(),price=Number(document.getElementById("newPrice").value),image_url=document.getElementById("newImage").value.trim()||null,download_url=document.getElementById("newDownload").value.trim()||null;
+ if(!name||!Number.isFinite(price)||price<0){notify("نام و قیمت معتبر وارد کن.");return;}
+ const {error}=await db.from("products").insert({name,description,price:Math.round(price),image_url,download_url,active:true});
+ if(error){notify("افزودن محصول ناموفق بود: "+error.message);return;}
+ ["newName","newDescription","newPrice","newImage","newDownload"].forEach(id=>document.getElementById(id).value="");notify("محصول اضافه شد.");await loadProducts();await loadAdmin();
+}
+async function toggleProduct(id,active){const {error}=await db.from("products").update({active}).eq("id",id);if(error){notify("تغییر وضعیت محصول ناموفق بود.");return;}await loadProducts();await loadAdmin();}
+async function deleteProduct(id){if(!confirm("این محصول حذف شود؟"))return;const {error}=await db.from("products").delete().eq("id",id);if(error){notify("حذف ناموفق بود: "+error.message);return;}await loadProducts();await loadAdmin();}
+async function changeStatus(id,status){const {error}=await db.from("orders").update({status}).eq("id",id);if(error){notify("تغییر وضعیت سفارش ناموفق بود: "+error.message);return;}await loadAdmin();}
+async function savePaymentSettings(){
+ if(!adminUser)return;const card_number=document.getElementById("editCardNumber").value.replace(/\s/g,""),cardholder_name=document.getElementById("editCardOwner").value.trim();
+ if(card_number && !/^\d{16}$/.test(card_number)){notify("شماره کارت باید ۱۶ رقم باشد.");return;}
+ const {error}=await db.from("payment_settings").update({card_number,cardholder_name,updated_at:new Date().toISOString()}).eq("id",1);
+ if(error){notify("ذخیره تنظیمات ناموفق بود: "+error.message);return;}paymentSettings={card_number,cardholder_name};notify("تنظیمات پرداخت ذخیره شد.");
+}
+document.getElementById("adminEmail") || (function(){const pw=document.getElementById("adminPassword");if(pw&&!document.getElementById("adminEmail")){const input=document.createElement("input");input.id="adminEmail";input.type="email";input.className="field mb-3";input.placeholder="ایمیل مدیر";pw.parentNode.insertBefore(input,pw);}})();
+(async function init(){saveCart();await loadProducts();const {data}=await db.auth.getSession();if(data?.session){const u=data.session.user;const {data:ok}=await db.from("admin_users").select("user_id").eq("user_id",u.id).maybeSingle();if(ok){adminUser=u;document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");}}})();
 
-  function readStorage(key, fallback) {
-    try {
-      const value = localStorage.getItem(key);
-      return value ? JSON.parse(value) : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
-  let products = readStorage("skl_products", defaultProducts);
-  let orders = readStorage("skl_orders", []);
-  let cart = [];
-  let isAdmin = false;
-
-  const paymentSettings = readStorage("skl_payment", {
-    cardNumber: "",
-    cardOwner: ""
-  });
-
-  function saveAll() {
-    localStorage.setItem("skl_products", JSON.stringify(products));
-    localStorage.setItem("skl_orders", JSON.stringify(orders));
-  }
-
-  function money(value) {
-    return Number(value || 0).toLocaleString("fa-IR") + " تومان";
-  }
-
-  function safe(value) {
-    return String(value ?? "").replace(/[&<>"']/g, char => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    })[char]);
-  }
-
-  function showPage(page) {
-    document.querySelectorAll(".page").forEach(el => el.classList.add("hidden"));
-    const target = document.getElementById(page);
-    if (target) target.classList.remove("hidden");
-
-    document.querySelectorAll(".navbtn").forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.page === page);
-    });
-
-    if (page === "cart") renderCart();
-    if (page === "shop") renderProducts();
-    if (page === "admin" && isAdmin) renderAdmin();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  document.querySelectorAll(".navbtn").forEach(btn => {
-    btn.addEventListener("click", () => showPage(btn.dataset.page));
-  });
-
-  function renderProducts() {
-    const grid = document.getElementById("productsGrid");
-    const available = products.filter(p => p.active);
-
-    if (!available.length) {
-      grid.innerHTML = '<p class="text-gray-400">فعلاً محصولی موجود نیست.</p>';
-      return;
-    }
-
-    grid.innerHTML = available.map(p => `
-      <article class="panel p-4 flex flex-col">
-        ${p.image
-          ? `<img src="${safe(p.image)}" alt="${safe(p.name)}" class="w-full h-40 object-cover rounded-xl mb-4">`
-          : `<div class="w-full h-40 rounded-xl mb-4 flex items-center justify-center bg-purple-950 text-5xl">💀</div>`}
-        <h3 class="font-black text-lg mb-2">${safe(p.name)}</h3>
-        <p class="text-gray-400 text-sm mb-4 flex-1">${safe(p.description)}</p>
-        <div class="flex items-center justify-between gap-3">
-          <strong class="text-purple-400">${money(p.price)}</strong>
-          <button class="btn primary" onclick="addToCart('${safe(p.id)}')">افزودن</button>
-        </div>
-      </article>
-    `).join("");
-  }
-
-  function addToCart(id) {
-    const product = products.find(p => p.id === id && p.active);
-    if (!product) return alert("این محصول در دسترس نیست.");
-
-    cart.push(id);
-    document.getElementById("cartCount").textContent = cart.length.toLocaleString("fa-IR");
-    alert("محصول به سبد خرید اضافه شد.");
-  }
-
-  function renderCart() {
-    const container = document.getElementById("cartItems");
-
-    if (!cart.length) {
-      container.innerHTML = '<p class="text-gray-400">سبد خریدت خالی است.</p>';
-    } else {
-      container.innerHTML = cart.map((id, index) => {
-        const p = products.find(item => item.id === id);
-        if (!p) return "";
-        return `
-          <div class="flex justify-between gap-3 py-3 border-b border-white/10">
-            <div>
-              <p class="font-bold">${safe(p.name)}</p>
-              <p class="text-sm text-purple-400">${money(p.price)}</p>
-            </div>
-            <button class="btn danger" onclick="removeFromCart(${index})">حذف</button>
-          </div>`;
-      }).join("");
-    }
-
-    const total = cart.reduce((sum, id) => {
-      const p = products.find(item => item.id === id);
-      return sum + (p ? Number(p.price) : 0);
-    }, 0);
-
-    document.getElementById("cartTotal").textContent = money(total);
-    document.getElementById("checkoutTotal").textContent = money(total);
-  }
-
-  function removeFromCart(index) {
-    cart.splice(index, 1);
-    document.getElementById("cartCount").textContent = cart.length.toLocaleString("fa-IR");
-    renderCart();
-  }
-
-  function getTotal() {
-    return cart.reduce((sum, id) => {
-      const p = products.find(item => item.id === id);
-      return sum + (p ? Number(p.price) : 0);
-    }, 0);
-  }
-
-  function placeOrder() {
-    if (!cart.length) {
-      alert("سبد خرید خالی است.");
-      showPage("shop");
-      return;
-    }
-
-    const name = document.getElementById("customerName").value.trim();
-    const contact = document.getElementById("customerContact").value.trim();
-    const reference = document.getElementById("paymentReference").value.trim();
-    const receiptInput = document.getElementById("receipt");
-
-    if (!name || !contact) {
-      alert("نام و راه ارتباطی را وارد کن.");
-      return;
-    }
-
-    const create = receiptData => {
-      const items = cart.map(id => {
-        const p = products.find(item => item.id === id);
-        return p ? { id: p.id, name: p.name, price: Number(p.price) } : null;
-      }).filter(Boolean);
-
-      const order = {
-        id: "SK-" + Date.now().toString(36).toUpperCase(),
-        customerName: name,
-        customerContact: contact,
-        paymentReference: reference,
-        items,
-        total: getTotal(),
-        receipt: receiptData || "",
-        status: "در انتظار بررسی",
-        createdAt: new Date().toISOString()
-      };
-
-      orders.unshift(order);
-      saveAll();
-      cart = [];
-      document.getElementById("cartCount").textContent = "۰";
-      document.getElementById("successCode").textContent = order.id;
-      document.getElementById("customerName").value = "";
-      document.getElementById("customerContact").value = "";
-      document.getElementById("paymentReference").value = "";
-      receiptInput.value = "";
-      showPage("success");
-    };
-
-    const file = receiptInput.files[0];
-
-    if (file) {
-      if (!file.type.startsWith("image/")) {
-        alert("لطفاً یک فایل تصویری انتخاب کن.");
-        return;
-      }
-      if (file.size > 1024 * 1024) {
-        alert("حجم تصویر باید کمتر از ۱ مگابایت باشد.");
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = () => create(reader.result);
-      reader.onerror = () => alert("خواندن تصویر ناموفق بود.");
-      reader.readAsDataURL(file);
-    } else {
-      create("");
-    }
-  }
-
-  function trackOrder() {
-    const code = document.getElementById("trackingCode").value.trim();
-    const result = document.getElementById("trackingResult");
-    const order = orders.find(o => o.id.toLowerCase() === code.toLowerCase());
-
-    if (!order) {
-      result.innerHTML = '<p class="text-red-400">سفارشی با این کد پیدا نشد.</p>';
-      return;
-    }
-
-    result.innerHTML = `
-      <div class="bg-black/30 rounded-xl p-4">
-        <p>کد سفارش: <strong>${safe(order.id)}</strong></p>
-        <p class="mt-2">وضعیت: <strong class="text-purple-400">${safe(order.status)}</strong></p>
-        <p class="mt-2">مبلغ: ${money(order.total)}</p>
-        <p class="mt-2 text-xs text-gray-500">تاریخ: ${safe(new Date(order.createdAt).toLocaleString("fa-IR"))}</p>
-      </div>`;
-  }
-
-  function loginAdmin() {
-    const password = document.getElementById("adminPassword").value;
-    if (password !== ADMIN_PASSWORD) {
-      document.getElementById("loginError").textContent = "رمز عبور اشتباه است.";
-      return;
-    }
-
-    isAdmin = true;
-    document.getElementById("adminLogin").classList.add("hidden");
-    document.getElementById("adminPanel").classList.remove("hidden");
-    document.getElementById("cardNumber").value = paymentSettings.cardNumber || "";
-    document.getElementById("cardOwner").value = paymentSettings.cardOwner || "";
-    renderAdmin();
-  }
-
-  function logoutAdmin() {
-    isAdmin = false;
-    document.getElementById("adminPanel").classList.add("hidden");
-    document.getElementById("adminLogin").classList.remove("hidden");
-    document.getElementById("adminPassword").value = "";
-    showPage("shop");
-  }
-
-  function addProduct() {
-    if (!isAdmin) return;
-
-    const name = document.getElementById("newName").value.trim();
-    const description = document.getElementById("newDescription").value.trim();
-    const price = Number(document.getElementById("newPrice").value);
-    const image = document.getElementById("newImage").value.trim();
-    const download = document.getElementById("newDownload").value.trim();
-
-    if (!name || !Number.isFinite(price) || price < 0) {
-      alert("نام و قیمت معتبر وارد کن.");
-      return;
-    }
-
-    products.unshift({
-      id: "p-" + Date.now(),
-      name,
-      description,
-      price,
-      image,
-      download,
-      active: true
-    });
-
-    saveAll();
-    ["newName", "newDescription", "newPrice", "newImage", "newDownload"].forEach(id => {
-      document.getElementById(id).value = "";
-    });
-
-    renderProducts();
-    renderAdmin();
-    alert("محصول اضافه شد.");
-  }
-
-  function savePaymentSettings() {
-    if (!isAdmin) return;
-
-    paymentSettings.cardNumber = document.getElementById("cardNumber").value.trim();
-    paymentSettings.cardOwner = document.getElementById("cardOwner").value.trim();
-    localStorage.setItem("skl_payment", JSON.stringify(paymentSettings));
-    alert("تنظیمات روی همین مرورگر ذخیره شد.");
-  }
-
-  function changeStatus(id, status) {
-    if (!isAdmin) return;
-    const order = orders.find(o => o.id === id);
-    if (!order) return;
-
-    order.status = status;
-    saveAll();
-    renderAdmin();
-  }
-
-  function deleteProduct(id) {
-    if (!isAdmin || !confirm("این محصول حذف شود؟")) return;
-    products = products.filter(p => p.id !== id);
-    saveAll();
-    renderProducts();
-    renderAdmin();
-  }
-
-  function renderAdmin() {
-    if (!isAdmin) return;
-
-    const productHtml = products.map(p => `
-      <div class="border-b border-white/10 py-3 flex justify-between gap-3">
-        <div>
-          <p class="font-bold">${safe(p.name)}</p>
-          <p class="text-sm text-purple-400">${money(p.price)}</p>
-          <p class="text-xs text-gray-500">${p.active ? "فعال" : "غیرفعال"}</p>
-        </div>
-        <button class="btn danger" onclick="deleteProduct('${safe(p.id)}')">حذف</button>
-      </div>
-    `).join("");
-
-    const ordersHtml = orders.length ? orders.map(o => `
-      <div class="border border-white/10 rounded-xl p-4">
-        <div class="flex justify-between flex-wrap gap-2">
-          <strong>${safe(o.id)}</strong>
-          <span class="text-purple-400">${money(o.total)}</span>
-        </div>
-        <p class="mt-2">مشتری: ${safe(o.customerName)}</p>
-        <p class="text-sm text-gray-400">ارتباط: ${safe(o.customerContact)}</p>
-        <p class="text-sm text-gray-400">شماره پیگیری پرداخت: ${safe(o.paymentReference || "ثبت نشده")}</p>
-        <p class="mt-2">وضعیت: <strong>${safe(o.status)}</strong></p>
-        <div class="flex flex-wrap gap-2 mt-3">
-          <button class="btn secondary" onclick="changeStatus('${safe(o.id)}','در حال بررسی')">در حال بررسی</button>
-          <button class="btn secondary" onclick="changeStatus('${safe(o.id)}','تأیید شده')">تأیید</button>
-          <button class="btn secondary" onclick="changeStatus('${safe(o.id)}','تحویل شده')">تحویل شد</button>
-          <button class="btn danger" onclick="changeStatus('${safe(o.id)}','رد شده')">رد سفارش</button>
-        </div>
-        ${o.receipt ? `<details class="mt-3"><summary class="cursor-pointer text-purple-300">مشاهده رسید</summary><img src="${o.receipt}" alt="رسید پرداخت" class="mt-3 max-w-full rounded-xl"></details>` : ""}
-      </div>
-    `).join("") : '<p class="text-gray-400">هنوز سفارشی ثبت نشده است.</p>';
-
-    document.getElementById("adminOrders").innerHTML =
-      `<div class="mb-6"><h4 class="font-bold mb-2">محصولات (${products.length})</h4>${productHtml}</div>
-       <div><h4 class="font-bold mb-3">سفارش‌ها (${orders.length})</h4><div class="space-y-3">${ordersHtml}</div></div>`;
-  }
-
-  renderProducts();
-  renderCart();
 </script>
 </body>
 </html>
