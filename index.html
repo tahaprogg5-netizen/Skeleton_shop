@@ -71,12 +71,12 @@
       <div class="panel p-5 max-w-xl">
         <label class="block mb-2">نام و نام خانوادگی</label>
         <input id="customerName" class="field mb-4" placeholder="نام شما">
-        <label class="block mb-2">شماره تماس یا راه ارتباطی</label>
-        <input id="customerContact" class="field mb-4" placeholder="مثلاً شماره تماس">
+        <label class="block mb-2">آیدی تلگرام</label>
+        <input id="customerContact" class="field mb-4" placeholder="مثلاً @username" autocomplete="off">
         <div class="bg-black/30 rounded-xl p-4 mb-4">
           <p class="text-gray-400 text-sm mb-2">مبلغ قابل پرداخت</p>
           <strong id="checkoutTotal" class="text-xl text-purple-400">۰ تومان</strong>
-          <p class="text-xs text-gray-500 mt-3">شماره کارت پرداخت را مدیر فروشگاه باید از طریق تنظیمات وارد کند.</p>
+          <div id="paymentDetails" class="hidden mt-4 rounded-lg border border-white/10 p-3"><p class="text-sm text-gray-400">پرداخت کارت‌به‌کارت</p><p class="mt-2">صاحب کارت: <strong id="paymentCardOwner"></strong></p><p class="mt-1">شماره کارت: <strong id="paymentCardNumber" dir="ltr"></strong></p><button type="button" class="btn secondary mt-3" onclick="copyCard()">کپی شماره کارت</button></div><p id="freeNotice" class="hidden text-green-300 text-sm mt-3">این سفارش رایگان است و نیازی به پرداخت ندارد.</p>
         </div>
         <label class="block mb-2">شماره پیگیری پرداخت (در صورت وجود)</label>
         <input id="paymentReference" class="field mb-4" placeholder="شماره پیگیری">
@@ -92,7 +92,7 @@
       <div class="panel p-5 max-w-xl">
         <label class="block mb-2">کد سفارش</label>
         <input id="trackingCode" class="field mb-4" placeholder="کد سفارش را وارد کن">
-        <label class="block mb-2">راه ارتباطی هنگام ثبت سفارش</label><input id="trackingContact" class="field mb-4" placeholder="شماره تماس یا شناسه">
+        <label class="block mb-2">آیدی تلگرام هنگام ثبت سفارش</label><input id="trackingContact" class="field mb-4" placeholder="مثلاً @username">
         <button class="btn primary" onclick="trackOrder()">بررسی وضعیت</button>
         <div id="trackingResult" class="mt-5"></div>
       </div>
@@ -120,11 +120,11 @@
         <div class="panel p-5 mb-5">
           <h3 class="font-bold text-lg mb-4">تنظیمات پرداخت</h3>
           <label class="block mb-2">شماره کارت</label>
-          <input id="cardNumber" class="field mb-3" placeholder="شماره کارت فروشگاه">
+          <input id="editCardNumber" class="field mb-3" placeholder="شماره کارت فروشگاه">
           <label class="block mb-2">نام صاحب کارت</label>
-          <input id="cardOwner" class="field mb-3" placeholder="نام صاحب کارت">
+          <input id="editCardOwner" class="field mb-3" placeholder="نام صاحب کارت">
           <button class="btn primary" onclick="savePaymentSettings()">ذخیره تنظیمات</button>
-          <p class="text-xs text-gray-500 mt-3">این تنظیمات فقط روی همین مرورگر ذخیره می‌شود.</p>
+          <p class="text-xs text-gray-500 mt-3">تنظیمات پرداخت در پایگاه داده ذخیره می‌شود.</p>
         </div>
         <div class="panel p-5">
           <div class="flex justify-between flex-wrap gap-3 mb-4">
@@ -204,7 +204,7 @@ async function renderCheckout(){
  if(error){notify("تنظیمات پرداخت دریافت نشد.");return;}
  paymentSettings=data||paymentSettings;
  const free=document.getElementById("freeNotice");if(free)free.classList.toggle("hidden",total!==0);
- if(total>0 && paymentSettings.card_number){document.getElementById("cardOwner").textContent=paymentSettings.cardholder_name||"";document.getElementById("cardNumber").textContent=paymentSettings.card_number;details.classList.remove("hidden");}
+ if(total>0 && paymentSettings.card_number && details){document.getElementById("paymentCardOwner").textContent=paymentSettings.cardholder_name||"";document.getElementById("paymentCardNumber").textContent=paymentSettings.card_number;details.classList.remove("hidden");}
 }
 async function copyCard(){try{await navigator.clipboard.writeText(paymentSettings.card_number||"");notify("شماره کارت کپی شد.");}catch(e){notify("کپی خودکار ممکن نیست؛ شماره کارت را انتخاب و کپی کن.");}}
 async function placeOrder(){
@@ -219,7 +219,8 @@ async function placeOrder(){
   if(upErr){notify("بارگذاری رسید ناموفق بود: "+upErr.message);return;}
  }
  const items=rows.map(p=>({id:p.id,quantity:p.qty}));
- const {data,error}=await db.rpc("create_store_order",{p_customer_name:name,p_customer_contact:contact,p_items:items,p_receipt_path:receiptPath});
+ const paymentReference=document.getElementById("paymentReference").value.trim();
+ const {data,error}=await db.rpc("create_store_order",{p_customer_name:name,p_customer_contact:contact,p_items:items,p_receipt_path:receiptPath,p_payment_reference:paymentReference||null});
  if(error){notify("ثبت سفارش ناموفق بود: "+error.message);return;}
  const result=Array.isArray(data)?data[0]:data;
  if(!result || !result.order_code){notify("سفارش ایجاد شد اما کد سفارش از سرور دریافت نشد. با مدیر تماس بگیر.");return;}
@@ -235,7 +236,7 @@ async function trackOrder(){
  const {data,error}=await db.rpc("track_store_order",{p_order_code:code,p_customer_contact:contact});
  if(error||!data||!(Array.isArray(data)?data.length:true)){result.innerHTML='<p class="text-red-300">سفارشی با این کد و اطلاعات پیدا نشد.</p>';return;}
  const o=Array.isArray(data)?data[0]:data;const labels={pending:"در انتظار بررسی",approved:"تأیید شده",rejected:"رد شده",delivered:"تحویل شده"};
- result.innerHTML='<div class="panel p-4"><p>کد: <strong>'+esc(o.order_code||code)+'</strong></p><p class="mt-2">وضعیت: <strong class="text-purple-300">'+esc(labels[o.status]||o.status||"نامشخص")+'</strong></p><p class="mt-2">مبلغ: '+fmt(o.total)+'</p></div>';
+ result.innerHTML='<div class="panel p-4"><p>کد: <strong>'+esc(o.order_code||code)+'</strong></p><p class="mt-2">وضعیت: <strong class="text-purple-300">'+esc(labels[o.status]||o.status||"نامشخص")+'</strong></p><p class="mt-2">مبلغ: '+fmt(o.total_toman??o.total)+'</p>'+(o.delivery_url?'<a class="btn primary inline-block mt-4" href="'+esc(o.delivery_url)+'" target="_blank" rel="noopener noreferrer">دریافت محصول</a>':'')+'</div>';
 }
 async function loginAdmin(){
  const email=document.getElementById("adminEmail")?.value.trim(),password=document.getElementById("adminPassword").value;
@@ -264,7 +265,7 @@ function renderAdminProducts(list){
 function renderAdminOrders(orders){
  const el=document.getElementById("adminOrders"),labels={pending:"در انتظار بررسی",approved:"تأیید شده",rejected:"رد شده",delivered:"تحویل شده"};
  if(!orders.length){el.innerHTML='<p class="text-gray-400">هنوز سفارشی ثبت نشده.</p>';return;}
- el.innerHTML=orders.map(o=>'<article class="border border-white/10 rounded-xl p-4"><div class="flex flex-wrap justify-between gap-2"><strong>'+esc(o.order_code)+'</strong><span class="text-purple-300">'+fmt(o.total)+'</span></div><p class="text-sm text-gray-300 mt-2">'+esc(o.customer_name)+' · '+esc(o.customer_contact)+'</p><p class="text-sm text-gray-400 mt-1">'+new Date(o.created_at).toLocaleString("fa-IR")+'</p><p class="mt-2">وضعیت: '+esc(labels[o.status]||o.status)+'</p>'+(o.receipt_path?'<button class="btn secondary mt-3" onclick="viewReceipt(\''+esc(o.receipt_path)+'\')">مشاهده رسید</button>':'<p class="text-xs text-gray-500 mt-2">رسیدی بارگذاری نشده.</p>')+'<div class="flex flex-wrap gap-2 mt-3"><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'approved\')">تأیید</button><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'rejected\')">رد</button><button class="btn primary" onclick="changeStatus(\''+o.id+'\',\'delivered\')">تحویل شد</button></div></article>').join("");
+ el.innerHTML=orders.map(o=>'<article class="border border-white/10 rounded-xl p-4"><div class="flex flex-wrap justify-between gap-2"><strong>'+esc(o.order_code)+'</strong><span class="text-purple-300">'+fmt(o.total)+'</span></div><p class="text-sm text-gray-300 mt-2">'+esc(o.customer_name)+' · تلگرام: '+esc(o.customer_contact)+'</p><p class="text-sm text-gray-400 mt-1">'+new Date(o.created_at).toLocaleString("fa-IR")+'</p><p class="mt-2">وضعیت: '+esc(labels[o.status]||o.status)+'</p>'+(o.payment_reference?'<p class="text-sm mt-2">شماره پیگیری پرداخت: '+esc(o.payment_reference)+'</p>':'')+(o.receipt_path?'<button class="btn secondary mt-3" onclick="viewReceipt(\''+esc(o.receipt_path)+'\')">مشاهده رسید</button>':'<p class="text-xs text-gray-500 mt-2">رسیدی بارگذاری نشده.</p>')+'<div class="mt-4"><label class="block text-sm mb-2">لینک تحویل این سفارش</label><input id="delivery-'+esc(o.id)+'" class="field mb-2" value="'+esc(o.delivery_url||"")+'" placeholder="https://..."><button class="btn secondary" onclick="saveDeliveryLink(\''+o.id+'\')">ذخیره لینک تحویل</button></div><div class="flex flex-wrap gap-2 mt-3"><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'approved\')">تأیید</button><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'rejected\')">رد</button><button class="btn primary" onclick="changeStatus(\''+o.id+'\',\'delivered\')">تحویل شد</button></div></article>').join("");
 }
 async function viewReceipt(path){const {data,error}=await db.storage.from("receipts").createSignedUrl(path,60);if(error){notify("نمایش رسید ممکن نیست: "+error.message);return;}window.open(data.signedUrl,"_blank","noopener");}
 async function addProduct(){
@@ -277,6 +278,7 @@ async function addProduct(){
 async function toggleProduct(id,active){const {error}=await db.from("products").update({active}).eq("id",id);if(error){notify("تغییر وضعیت محصول ناموفق بود.");return;}await loadProducts();await loadAdmin();}
 async function deleteProduct(id){if(!confirm("این محصول حذف شود؟"))return;const {error}=await db.from("products").delete().eq("id",id);if(error){notify("حذف ناموفق بود: "+error.message);return;}await loadProducts();await loadAdmin();}
 async function changeStatus(id,status){const {error}=await db.from("orders").update({status}).eq("id",id);if(error){notify("تغییر وضعیت سفارش ناموفق بود: "+error.message);return;}await loadAdmin();}
+async function saveDeliveryLink(id){if(!adminUser)return;const input=document.getElementById("delivery-"+id);const url=(input?.value||"").trim();if(url&&!/^https:\/\//i.test(url)){notify("لینک تحویل باید با https:// شروع شود.");return;}const {error}=await db.from("orders").update({delivery_url:url||null}).eq("id",id);if(error){notify("ذخیره لینک تحویل ناموفق بود: "+error.message);return;}notify("لینک تحویل در پایگاه داده ذخیره شد.");await loadAdmin();}
 async function savePaymentSettings(){
  if(!adminUser)return;const card_number=document.getElementById("editCardNumber").value.replace(/\s/g,""),cardholder_name=document.getElementById("editCardOwner").value.trim();
  if(card_number && !/^\d{16}$/.test(card_number)){notify("شماره کارت باید ۱۶ رقم باشد.");return;}
