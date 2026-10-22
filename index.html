@@ -132,7 +132,9 @@
             <h3 class="font-bold text-lg">سفارش‌ها</h3>
             <button class="btn secondary" onclick="logoutAdmin()">خروج</button>
           </div>
-          <div id="adminOrders" class="space-y-3"></div>
+          <h3 class="font-bold text-lg mt-7 mb-4">رسیدهای حمایت</h3>
+          <div id="adminSupport" class="space-y-3"><p class="text-gray-400">برای مشاهده رسیدها وارد پنل شو.</p></div>
+                    <div id="adminOrders" class="space-y-3"></div>
         </div>
       </div>
     </section>
@@ -149,6 +151,37 @@
     </section>
   </main>
 
+  <section id="support" class="max-w-6xl mx-auto px-4 pt-8">
+    <div class="panel p-5 md:p-7">
+      <div class="max-w-2xl mx-auto">
+        <p class="text-purple-400 font-bold mb-2">💜 حمایت از اسکلتون‌شاپ</p>
+        <h2 class="text-2xl font-black mb-3">برای ادامه‌ی کار کنار ما باش</h2>
+        <p class="text-sm text-gray-400 mb-5">اگر این فروشگاه برات مفید بوده، می‌تونی مبلغ دلخواهت رو کارت‌به‌کارت کنی و تصویر رسید رو همین‌جا بفرستی.</p>
+        <div class="rounded-xl bg-black/30 border border-white/10 p-4 mb-5">
+          <p class="text-sm text-gray-400">صاحب کارت</p><p id="supportCardOwner" class="font-bold mt-1">در حال دریافت…</p>
+          <p class="text-sm text-gray-400 mt-3">شماره کارت</p><p id="supportCardNumber" class="text-lg font-black text-purple-300 mt-1" dir="ltr">—</p>
+          <button type="button" class="btn secondary mt-3" onclick="copySupportCard()">کپی شماره کارت</button>
+        </div>
+        <form id="supportForm" class="space-y-3" onsubmit="submitSupport(event)">
+          <label class="block text-sm">نام (اختیاری)</label>
+          <input id="supportName" class="field" maxlength="100" placeholder="نام شما">
+          <label class="block text-sm">آیدی تلگرام یا راه ارتباطی</label>
+          <input id="supportContact" class="field" maxlength="120" required placeholder="مثلاً @username">
+          <label class="block text-sm">مبلغ حمایت (تومان)</label>
+          <select id="supportAmount" class="field" required>
+            <option value="10000">۱۰٬۰۰۰ تومان</option><option value="25000">۲۵٬۰۰۰ تومان</option><option value="50000">۵۰٬۰۰۰ تومان</option><option value="100000">۱۰۰٬۰۰۰ تومان</option><option value="other">مبلغ دلخواه</option>
+          </select>
+          <input id="supportCustomAmount" type="number" min="1000" max="1000000000" class="field hidden" placeholder="مبلغ دلخواه به تومان">
+          <label class="block text-sm">شماره پیگیری پرداخت (اختیاری)</label>
+          <input id="supportReference" class="field" maxlength="120" placeholder="شماره پیگیری">
+          <label class="block text-sm">تصویر رسید پرداخت</label>
+          <input id="supportReceipt" type="file" accept="image/*,.pdf" class="field" required>
+          <button id="supportSubmitButton" class="btn primary w-full" type="submit">ارسال رسید حمایت</button>
+          <p id="supportMessage" class="text-sm text-gray-400" aria-live="polite">پس از انتقال وجه، فرم را تکمیل کن. رسید فقط برای بررسی مدیر ثبت می‌شود.</p>
+        </form>
+      </div>
+    </div>
+  </section>
   <footer class="text-center text-gray-500 text-sm p-8 mt-8 border-t border-white/10">
     اسکلتون شاپ · فروشگاه محصولات دیجیتال
   </footer>
@@ -218,6 +251,57 @@ async function renderCheckout(){
  const free=document.getElementById("freeNotice");if(free)free.classList.toggle("hidden",total!==0);
  if(total>0 && paymentSettings.card_number && details){document.getElementById("paymentCardOwner").textContent=paymentSettings.cardholder_name||"";document.getElementById("paymentCardNumber").textContent=paymentSettings.card_number;details.classList.remove("hidden");}
 }
+
+async function loadSupportPayment(){
+ const owner=document.getElementById("supportCardOwner"),number=document.getElementById("supportCardNumber");
+ const {data,error}=await db.from("payment_settings").select("cardholder_name,card_number").eq("id",1).maybeSingle();
+ if(error||!data){owner.textContent="اطلاعات کارت تنظیم نشده";number.textContent="";return;}
+ paymentSettings=data;owner.textContent=data.cardholder_name||"—";number.textContent=data.card_number||"شماره کارت هنوز ثبت نشده";
+}
+async function copySupportCard(){
+ if(!paymentSettings.card_number){notify("شماره کارت هنوز توسط مدیر تنظیم نشده.");return;}
+ try{await navigator.clipboard.writeText(paymentSettings.card_number);notify("شماره کارت کپی شد.");}
+ catch(e){notify("کپی خودکار ممکن نیست؛ شماره کارت را انتخاب و کپی کن.");}
+}
+document.getElementById("supportAmount")?.addEventListener("change",e=>{
+ const custom=document.getElementById("supportCustomAmount");
+ custom.classList.toggle("hidden",e.target.value!=="other");
+ custom.required=e.target.value==="other";
+});
+async function submitSupport(event){
+ event.preventDefault();
+ const message=document.getElementById("supportMessage"),button=document.getElementById("supportSubmitButton");
+ const name=document.getElementById("supportName").value.trim()||"حامی ناشناس";
+ const contact=document.getElementById("supportContact").value.trim();
+ const file=document.getElementById("supportReceipt").files[0];
+ const selected=document.getElementById("supportAmount").value;
+ const amount=selected==="other"?Number(document.getElementById("supportCustomAmount").value):Number(selected);
+ const reference=document.getElementById("supportReference").value.trim();
+ if(!paymentSettings.card_number){message.textContent="مدیر هنوز شماره کارت را تنظیم نکرده است.";return;}
+ if(!contact||!file||!Number.isSafeInteger(amount)||amount<1000||amount>1000000000){message.textContent="اطلاعات را بررسی کن؛ حداقل مبلغ حمایت ۱٬۰۰۰ تومان است.";return;}
+ if(file.size>5*1024*1024){message.textContent="حجم رسید نباید بیشتر از ۵ مگابایت باشد.";return;}
+ const ext=(file.name.split(".").pop()||"jpg").toLowerCase();
+ if(!["jpg","jpeg","png","webp","pdf"].includes(ext)){message.textContent="فرمت رسید باید JPG، PNG، WEBP یا PDF باشد.";return;}
+ button.disabled=true;button.textContent="در حال ارسال…";message.textContent="در حال بارگذاری رسید…";
+ const path="support/"+Date.now()+"-"+Math.random().toString(36).slice(2)+"."+ext;
+ try{
+  const {error:uploadError}=await db.storage.from("receipts").upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});
+  if(uploadError)throw uploadError;
+  const {error}=await db.from("support_donations").insert({donor_name:name,contact,amount_toman:amount,receipt_path:path,payment_reference:reference||null});
+  if(error)throw error;
+  document.getElementById("supportForm").reset();
+  document.getElementById("supportCustomAmount").classList.add("hidden");
+  message.textContent="رسید حمایت ثبت شد. ممنون از همراهی‌ات 💜";
+ }catch(error){
+  message.textContent="ثبت رسید انجام نشد: "+(error?.message||"خطای ناشناخته")+"؛ لطفاً دوباره تلاش کن.";
+ }finally{button.disabled=false;button.textContent="ارسال رسید حمایت";}
+}
+function renderAdminSupport(rows){
+ const el=document.getElementById("adminSupport");
+ if(!rows.length){el.innerHTML='<p class="text-gray-400">هنوز رسید حمایتی ثبت نشده است.</p>';return;}
+ el.innerHTML=rows.map(x=>'<article class="border border-white/10 rounded-xl p-4"><div class="flex flex-wrap justify-between gap-2"><strong>'+esc(x.donor_name)+'</strong><span class="text-purple-300">'+fmt(x.amount_toman)+'</span></div><p class="text-sm text-gray-300 mt-2">راه ارتباطی: '+esc(x.contact)+'</p>'+(x.payment_reference?'<p class="text-sm text-gray-400 mt-1">شماره پیگیری: '+esc(x.payment_reference)+'</p>':'')+'<p class="text-xs text-gray-500 mt-2">'+new Date(x.created_at).toLocaleString("fa-IR")+'</p><button class="btn secondary mt-3" onclick="viewReceipt(\''+esc(x.receipt_path)+'\')">مشاهده رسید</button></article>').join("");
+}
+
 async function copyCard(){try{await navigator.clipboard.writeText(paymentSettings.card_number||"");notify("شماره کارت کپی شد.");}catch(e){notify("کپی خودکار ممکن نیست؛ شماره کارت را انتخاب و کپی کن.");}}
 async function placeOrder(){
  const name=document.getElementById("customerName").value.trim(),contact=document.getElementById("customerContact").value.trim(),file=document.getElementById("receipt").files[0],rows=cartRows();
@@ -276,9 +360,10 @@ async function loginAdmin(){
 async function logoutAdmin(){await db.auth.signOut();adminUser=null;document.getElementById("adminLogin").classList.remove("hidden");document.getElementById("adminPanel").classList.add("hidden");}
 async function loadAdmin(){
  if(!adminUser)return;
- const [pr,or,ps]=await Promise.all([db.from("products").select("*").order("created_at",{ascending:false}),db.from("orders").select("*").order("created_at",{ascending:false}),db.from("payment_settings").select("*").eq("id",1).maybeSingle()]);
+ const [pr,or,ps,sd]=await Promise.all([db.from("products").select("*").order("created_at",{ascending:false}),db.from("orders").select("*").order("created_at",{ascending:false}),db.from("payment_settings").select("*").eq("id",1).maybeSingle(),db.from("support_donations").select("*").order("created_at",{ascending:false}).limit(100)]);
  if(pr.error)notify("خواندن محصولات مدیر ناموفق بود: "+pr.error.message);else renderAdminProducts(pr.data||[]);
  if(or.error)document.getElementById("adminOrders").innerHTML='<p class="text-red-300">دریافت سفارش‌ها ناموفق بود: '+esc(or.error.message)+'</p>';else renderAdminOrders(or.data||[]);
+ if(sd.error)document.getElementById("adminSupport").innerHTML='<p class="text-red-300">دریافت حمایت‌ها ناموفق بود: '+esc(sd.error.message)+'</p>';else renderAdminSupport(sd.data||[]);
  if(ps.data){document.getElementById("editCardNumber").value=ps.data.card_number||"";document.getElementById("editCardOwner").value=ps.data.cardholder_name||"";}
 }
 function renderAdminProducts(list){
@@ -361,7 +446,7 @@ async function savePaymentSettings(){
  if(error){notify("ذخیره تنظیمات ناموفق بود: "+error.message);return;}paymentSettings={card_number,cardholder_name};notify("تنظیمات پرداخت ذخیره شد.");
 }
 
-(async function init(){saveCart();await loadProducts();const {data}=await db.auth.getSession();if(data?.session){const u=data.session.user;const {data:ok}=await db.from("admin_users").select("user_id").eq("user_id",u.id).maybeSingle();if(ok){adminUser=u;document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");}}})();
+(async function init(){saveCart();await loadProducts();await loadSupportPayment();const {data}=await db.auth.getSession();if(data?.session){const u=data.session.user;const {data:ok}=await db.from("admin_users").select("user_id").eq("user_id",u.id).maybeSingle();if(ok){adminUser=u;document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");}}})();
 
 </script>
 </body>
