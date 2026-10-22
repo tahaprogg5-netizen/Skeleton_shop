@@ -176,11 +176,22 @@ function showPage(id){
 document.querySelectorAll(".navbtn").forEach(b=>b.addEventListener("click",()=>showPage(b.dataset.page)));
 async function loadProducts(){
  const grid=document.getElementById("productsGrid");
+ if(!grid)return;
  grid.innerHTML='<div class="panel p-5 text-gray-400">در حال دریافت محصولات…</div>';
- const {data,error}=await db.from("products").select("id,name,description,price,image_url,download_url,active").eq("active",true).order("created_at",{ascending:false});
- if(error){grid.innerHTML='<div class="panel p-5 text-red-300">اتصال محصولات ناموفق بود: '+esc(error.message)+'</div>';return;}
- products=data||[];
- renderProducts();
+ try {
+  if(!window.supabase || !db) throw new Error("کتابخانه اتصال بارگذاری نشده؛ اتصال اینترنت را بررسی کن.");
+  const {data,error}=await db.from("products").select("id,name,description,price,image_url,download_url,active").eq("active",true).order("created_at",{ascending:false});
+  if(error){
+   console.error("loadProducts Supabase error:",error);
+   grid.innerHTML='<div class="panel p-5 text-red-300">دریافت محصولات ناموفق بود: '+esc(error.message)+'<button class="btn secondary mt-3" onclick="loadProducts()">تلاش دوباره</button></div>';
+   return;
+  }
+  products=data||[];
+  renderProducts();
+ } catch(error) {
+  console.error("loadProducts failed:",error);
+  grid.innerHTML='<div class="panel p-5 text-red-300">بارگذاری محصولات انجام نشد: '+esc(error?.message||"خطای ناشناخته")+'<button class="btn secondary mt-3" onclick="loadProducts()">تلاش دوباره</button></div>';
+ }
 }
 function renderProducts(){
  const grid=document.getElementById("productsGrid");
