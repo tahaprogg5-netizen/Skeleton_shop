@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اسکلتون شاپ | Skeleton Shop</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Vazirmatn', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .shake { animation: shake 0.4s ease-in-out; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col">
+    <header class="border-b border-zinc-800 bg-zinc-950 sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <button onclick="openAdminLoginModal()" class="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center hover:bg-zinc-800 transition" title="پنل مدیریت">
+                <i class="fa-solid fa-lock text-xs text-zinc-300"></i>
+            </button>
+            <h1 class="text-lg font-bold tracking-wider">اسکلتون شاپ <span class="text-xs text-zinc-500 font-normal">SKEL</span></h1>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="switchTab('tracking')" class="text-xs bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg hover:bg-zinc-800 transition">
+                <i class="fa-solid fa-search ml-1"></i> پیگیری
+            </button>
+            <button onclick="toggleCart()" class="relative w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center hover:bg-zinc-800 transition">
+                <i class="fa-solid fa-shopping-cart text-xs"></i>
+                <span id="cart-badge" class="absolute -top-1 -right-1 bg-white text-black text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center hidden">0</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-4xl w-full mx-auto p-4 pb-24">
+        <div id="tab-shop" class="space-y-6">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-center space-y-2">
+                <h2 class="text-xl font-bold tracking-wide">فروشگاه دیجیتال اسکلتون</h2>
+                <p class="text-xs text-zinc-400">سریع، امن و مینیمال. محصولات خود را آنلاین تحویل بگیرید.</p>
+            </div>
+            <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+        </div>
+
+        <div id="tab-checkout" class="hidden space-y-4">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h2 class="font-bold text-base">تکمیل سفارش</h2>
+                <button onclick="switchTab('shop')" class="text-xs text-zinc-400 hover:text-white">بازگشت</button>
+            </div>
+            <div id="checkout-items" class="space-y-2 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800"></div>
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <h3 class="text-sm font-bold text-zinc-300">اطلاعات خریدار</h3>
+                <input type="text" id="buyer-name" placeholder="نام و نام خانوادگی" class="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-xs focus:outline-none focus:border-white">
+                <input type="text" id="buyer-phone" placeholder="شماره موبایل یا آیدی تلگرام" class="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-xs focus:outline-none focus:border-white">
+            </div>
+            <div id="payment-box" class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+                <h3 class="text-sm font-bold text-zinc-300">کارت به کارت</h3>
+                <p class="text-xs text-zinc-400">لطفاً مبلغ فاکتور را به شماره کارت زیر واریز کرده و تصویر رسید را بارگذاری کنید:</p>
+                <div class="bg-black p-3 rounded-lg border border-zinc-800 text-center font-mono text-sm tracking-widest text-zinc-200">6037-9974-1234-5678</div>
+                <div class="space-y-1 pt-2">
+                    <label class="text-xs text-zinc-400">آپلود تصویر رسید:</label>
+                    <input type="file" id="receipt-file" accept="image/*" class="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700">
+                </div>
+            </div>
+            <button onclick="submitOrder()" class="w-full bg-white text-black font-bold py-3 rounded-xl text-sm hover:bg-zinc-200 transition">ثبت نهایی سفارش</button>
+        </div>
+
+        <div id="tab-tracking" class="hidden space-y-4">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h2 class="font-bold text-base">پیگیری سفارش</h2>
+                <button onclick="switchTab('shop')" class="text-xs text-zinc-400 hover:text-white">بازگشت</button>
+            </div>
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <input type="text" id="track-input" placeholder="شماره سفارش (مثال: SKL-1001)" class="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-xs focus:outline-none focus:border-white">
+                <button onclick="trackOrder()" class="w-full bg-zinc-800 hover:bg-zinc-700 py-2.5 rounded-lg text-xs font-bold transition">استعلام وضعیت</button>
+            </div>
+            <div id="track-result" class="space-y-3"></div>
+        </div>
+
+        <div id="tab-admin" class="hidden space-y-4">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <h2 class="font-bold text-base">پنل مدیریت اسکلتون</h2>
+                    <span class="text-[10px] bg-white text-black px-2 py-0.5 rounded font-bold">مدیر</span>
+                </div>
+                <button onclick="adminLogout()" class="text-xs bg-red-950 text-red-300 border border-red-900 px-3 py-1.5 rounded-lg hover:bg-red-900 transition">خروج</button>
+            </div>
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+                <h3 class="text-xs font-bold text-zinc-300">افزودن محصول جدید</h3>
+                <input type="text" id="new-p-name" placeholder="نام محصول" class="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs">
+                <input type="number" id="new-p-price" placeholder="قیمت (تومان - 0 برای رایگان)" class="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs">
+                <input type="text" id="new-p-file" placeholder="لینک فایل دانلودی" class="w-full bg-black border border-zinc-800 rounded-lg p-2 text-xs">
+                <button onclick="addNewProduct()" class="w-full bg-zinc-800 hover:bg-zinc-700 py-2 rounded-lg text-xs font-bold transition">ثبت محصول</button>
+            </div>
+            <h3 class="text-xs font-bold text-zinc-400 pt-2">مدیریت سفارشات مشتریان</h3>
+            <div id="admin-orders-list" class="space-y-3"></div>
+        </div>
+    </main>
+
+    <div id="cart-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex justify-end">
+        <div class="bg-zinc-950 w-full max-w-md h-full border-l border-zinc-800 p-4 flex flex-col justify-between">
+            <div class="space-y-4">
+                <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                    <h3 class="font-bold text-sm">سبد خرید</h3>
+                    <button onclick="toggleCart()" class="text-zinc-400 hover:text-white text-xs"><i class="fa-solid fa-xmark text-sm"></i></button>
+                </div>
+                <div id="cart-drawer-items" class="space-y-3 overflow-y-auto max-h-[60vh]"></div>
+            </div>
+            <div class="border-t border-zinc-800 pt-4 space-y-3">
+                <div class="flex justify-between text-xs font-bold"><span>مجموع قابل پرداخت:</span><span id="cart-total-price">0 تومان</span></div>
+                <button onclick="proceedToCheckout()" class="w-full bg-white text-black font-bold py-3 rounded-xl text-xs hover:bg-zinc-200 transition">ادامه فرایند خرید</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-login-modal" class="fixed inset-0 bg-black/85 z-50 hidden flex items-center justify-center p-4">
+        <div id="login-modal-box" class="bg-zinc-950 border border-zinc-800 w-full max-w-xs rounded-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 class="font-bold text-sm">ورود به پنل مدیریت</h3>
+                <button onclick="closeAdminLoginModal()" class="text-zinc-500 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <input type="password" id="admin-pass-input" placeholder="رمز عددی ۱۲ رقمی" class="w-full bg-black border border-zinc-800 rounded-lg p-2.5 text-xs focus:outline-none focus:border-white">
+            <p id="login-error-msg" class="text-[10px] text-red-500 hidden">رمز عبور اشتباه است!</p>
+            <button onclick="verifyAdminPassword()" class="w-full bg-white text-black font-bold py-2.5 rounded-lg text-xs hover:bg-zinc-200 transition">تایید و ورود</button>
+        </div>
+    </div>
+
+    <div id="receipt-modal" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl max-w-sm w-full space-y-3 text-center">
+            <h3 class="font-bold text-xs text-zinc-300">تصویر رسید واریز</h3>
+            <img id="receipt-preview-img" src="" alt="تصویر رسید" class="max-h-80 mx-auto rounded-lg border border-zinc-800 object-contain">
+            <button onclick="closeReceiptModal()" class="w-full bg-zinc-800 hover:bg-zinc-700 py-2 rounded-lg text-xs font-bold">بستن</button>
+        </div>
+    </div>
+
+    <script>
+        const defaultProducts = [
+            { id: 1, name: "شناسنامه پنکه", price: 0, file: "https://example.com/fan-id.zip" },
+            { id: 2, name: "کارت پایان خدمت پنکه", price: 50000, file: "https://example.com/fan-card.zip" }
+        ];
+        let products;
+        try {
+            products = JSON.parse(localStorage.getItem('skl_products') || 'null') || defaultProducts;
+        } catch (e) {
+            products = defaultProducts;
+        }
+        function saveProducts() {
+            try {
+                localStorage.setItem('skl_products', JSON.stringify(products));
+                return true;
+            } catch (e) {
+                alert('ذخیره محصولات در مرورگر انجام نشد.');
+                return false;
+            }
+        }
+        let cart = [];
+        let orders = JSON.parse(localStorage.getItem('skl_orders') || '[]');
+        let isAdminLoggedIn = false;
+        let failedAdminAttempts = 0;
+        let adminLockUntil = 0;
+
+        function init() { renderProducts(); updateCartBadge(); }
+        function switchTab(tabId) {
+            ['shop', 'checkout', 'tracking', 'admin'].forEach(t => document.getElementById(`tab-${t}`).classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            if (tabId === 'admin' && isAdminLoggedIn) renderAdminOrders();
+        }
+        function renderProducts() {
+            document.getElementById('product-grid').innerHTML = products.map(p => `
+                <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between space-y-4">
+                    <div><h3 class="font-bold text-sm"></h3><p class="text-xs text-zinc-400 mt-1">${Number(p.price) === 0 ? 'رایگان' : Number(p.price).toLocaleString() + ' تومان'}</p></div>
+                    <button onclick="addToCart(${Number(p.id)})" class="w-full bg-white text-black font-bold py-2 rounded-lg text-xs hover:bg-zinc-200 transition">افزودن به سبد خرید</button>
+                    ${isAdminLoggedIn ? `<button onclick="deleteProduct(${Number(p.id)})" class="w-full bg-red-950 text-red-300 border border-red-900 py-2 rounded-lg text-xs">حذف محصول</button>` : ''}
+                </div>`).join('');
+            // Use textContent for product names instead of injecting names as HTML.
+            document.querySelectorAll('#product-grid > div').forEach((card, index) => {
+                const heading = card.querySelector('h3');
+                if (heading && products[index]) heading.textContent = products[index].name;
+            });
+        }
+        function deleteProduct(id) {
+            if (!isAdminLoggedIn) return;
+            const product = products.find(p => Number(p.id) === Number(id));
+            if (!product) return;
+            if (!confirm('محصول «' + product.name + '» حذف شود؟')) return;
+            products = products.filter(p => Number(p.id) !== Number(id));
+            cart = cart.filter(item => Number(item.id) !== Number(id));
+            saveProducts();
+            updateCartBadge();
+            renderProducts();
+            renderCartDrawer();
+            alert('محصول حذف شد.');
+        }
+        function toggleCart() { document.getElementById('cart-modal').classList.toggle('hidden'); renderCartDrawer(); }
+        function addToCart(id) {
+            const prod = products.find(p => p.id === id);
+            if (!prod) return;
+            const exist = cart.find(item => item.id === id);
+            if (exist) exist.qty++; else cart.push({...prod, qty: 1});
+            updateCartBadge(); renderCartDrawer();
+            document.getElementById('cart-modal').classList.remove('hidden');
+        }
+        function updateCartBadge() {
+            const badge = document.getElementById('cart-badge');
+            const totalQty = cart.reduce((sum, i) => sum + i.qty, 0);
+            badge.classList.toggle('hidden', totalQty === 0);
+            badge.innerText = totalQty;
+        }
+        function renderCartDrawer() {
+            const container = document.getElementById('cart-drawer-items');
+            const totalPriceEl = document.getElementById('cart-total-price');
+            if (!cart.length) { container.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">سبد خرید شما خالی است.</p>'; totalPriceEl.innerText = '0 تومان'; return; }
+            const total = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+            container.innerHTML = cart.map(item => `
+                <div class="flex justify-between items-center bg-black p-3 rounded-lg border border-zinc-800">
+                    <div><h4 class="text-xs font-bold">${item.name}</h4><p class="text-[10px] text-zinc-400">${item.price === 0 ? 'رایگان' : item.price.toLocaleString() + ' تومان'}</p></div>
+                    <div class="flex items-center gap-2"><span class="text-xs">تعداد: ${item.qty}</span><button onclick="removeFromCart(${item.id})" class="text-zinc-500 hover:text-red-400 text-xs"><i class="fa-solid fa-trash"></i></button></div>
+                </div>`).join('');
+            totalPriceEl.innerText = total.toLocaleString() + ' تومان';
+        }
+        function removeFromCart(id) { cart = cart.filter(i => i.id !== id); updateCartBadge(); renderCartDrawer(); }
+        function proceedToCheckout() {
+            if (!cart.length) return;
+            document.getElementById('cart-modal').classList.add('hidden');
+            switchTab('checkout');
+            const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+            document.getElementById('checkout-items').innerHTML = `<div class="text-xs space-y-1"><p class="font-bold">تعداد اقلام: ${cart.reduce((s, i) => s + i.qty, 0)}</p><p class="font-bold">مجموع مبلغ: ${total === 0 ? 'رایگان' : total.toLocaleString() + ' تومان'}</p></div>`;
+            document.getElementById('payment-box').classList.toggle('hidden', total === 0);
+        }
+        function submitOrder() {
+            const name = document.getElementById('buyer-name').value.trim();
+            const phone = document.getElementById('buyer-phone').value.trim();
+            const fileInput = document.getElementById('receipt-file');
+            const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+            if (!cart.length) { alert('سبد خرید خالی است.'); return; }
+            if (!name || !phone) { alert('لطفاً اطلاعات خریدار را وارد کنید.'); return; }
+            if (total > 0 && (!fileInput.files || !fileInput.files[0])) { alert('لطفاً تصویر رسید پرداخت را انتخاب کنید.'); return; }
+            if (total > 0 && fileInput.files[0].size > 3 * 1024 * 1024) { alert('حجم تصویر رسید باید کمتر از ۳ مگابایت باشد.'); return; }
+            if (total > 0) {
+                const reader = new FileReader();
+                reader.onload = e => saveOrderRecord(name, phone, e.target.result, total);
+                reader.readAsDataURL(fileInput.files[0]);
+            } else saveOrderRecord(name, phone, null, total);
+        }
+        function saveOrderRecord(name, phone, receiptImg, total) {
+            let orderId;
+            do { orderId = 'SKL-' + Math.floor(1000 + Math.random() * 9000); } while (orders.some(o => o.id === orderId));
+            const newOrder = { id: orderId, name, phone, items: cart.map(i => ({...i})), total, receipt: receiptImg, status: total === 0 ? 'تایید شده' : 'در حال بررسی', date: new Date().toLocaleDateString('fa-IR') };
+            orders.unshift(newOrder);
+            try { localStorage.setItem('skl_orders', JSON.stringify(orders)); }
+            catch (e) { alert('ذخیره سفارش انجام نشد؛ احتمالاً حافظه مرورگر پر است.'); return; }
+            cart = []; updateCartBadge();
+            document.getElementById('buyer-name').value = '';
+            document.getElementById('buyer-phone').value = '';
+            document.getElementById('receipt-file').value = '';
+            alert(`سفارش ثبت شد!\nشماره پیگیری: ${orderId}`);
+            switchTab('tracking');
+            document.getElementById('track-input').value = orderId;
+            trackOrder();
+        }
+        function trackOrder() {
+            const query = document.getElementById('track-input').value.trim();
+            const resultBox = document.getElementById('track-result');
+            const order = orders.find(o => o.id === query);
+            if (!order) { resultBox.innerHTML = '<p class="text-xs text-zinc-500 text-center py-4">سفارشی با این شماره پیدا نشد.</p>'; return; }
+            let downloadSection = '';
+            if (order.status === 'تایید شده') {
+                downloadSection = `<div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl space-y-2 text-center"><p class="text-xs text-zinc-300">سفارش تایید شد. لینک دانلود محصولات:</p>${order.items.map(i => `<a href="${i.file}" target="_blank" rel="noopener noreferrer" class="block bg-white text-black font-bold py-2 rounded-lg text-xs hover:bg-zinc-200 transition mt-1">دانلود ${i.name}</a>`).join('')}</div>`;
+            } else if (order.status === 'رد شده') {
+                downloadSection = '<p class="text-xs text-red-300 text-center bg-red-950/30 border border-red-900/50 p-3 rounded-lg">سفارش رد شده است. برای پیگیری با مدیریت تماس بگیرید.</p>';
+            } else {
+                downloadSection = '<p class="text-xs text-amber-500 text-center bg-amber-950/30 border border-amber-900/50 p-3 rounded-lg">سفارش در حال بررسی توسط مدیریت است.</p>';
+            }
+            resultBox.innerHTML = `<div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3"><div class="flex justify-between items-center text-xs border-b border-zinc-800 pb-2"><span class="text-zinc-400">شماره سفارش:</span><span class="font-bold">${order.id}</span></div><div class="flex justify-between items-center text-xs"><span class="text-zinc-400">وضعیت:</span><span class="font-bold">${order.status}</span></div>${downloadSection}</div>`;
+        }
+        function openAdminLoginModal() {
+            if (isAdminLoggedIn) { switchTab('admin'); return; }
+            document.getElementById('admin-login-modal').classList.remove('hidden');
+            document.getElementById('admin-pass-input').value = '';
+            document.getElementById('login-error-msg').classList.add('hidden');
+        }
+        function closeAdminLoginModal() { document.getElementById('admin-login-modal').classList.add('hidden'); }
+        function verifyAdminPassword() {
+            if (Date.now() < adminLockUntil) {
+                const seconds = Math.ceil((adminLockUntil - Date.now()) / 1000);
+                document.getElementById('login-error-msg').textContent = 'تلاش ناموفق زیاد بوده؛ ' + seconds + ' ثانیه صبر کن.';
+                document.getElementById('login-error-msg').classList.remove('hidden');
+                return;
+            }
+            if (document.getElementById('admin-pass-input').value === '846291730584') {
+                failedAdminAttempts = 0;
+                adminLockUntil = 0;
+                document.getElementById('login-error-msg').textContent = 'رمز عبور اشتباه است!';
+                isAdminLoggedIn = true; closeAdminLoginModal(); renderProducts(); switchTab('admin');
+            } else {
+                failedAdminAttempts++;
+                if (failedAdminAttempts >= 5) {
+                    adminLockUntil = Date.now() + 30_000;
+                    failedAdminAttempts = 0;
+                }
+                const err = document.getElementById('login-error-msg');
+                err.textContent = 'رمز عبور اشتباه است!';
+                const box = document.getElementById('login-modal-box');
+                err.classList.remove('hidden'); box.classList.add('shake');
+                setTimeout(() => box.classList.remove('shake'), 400);
+            }
+        }
+        document.getElementById('admin-pass-input').addEventListener('keydown', e => { if (e.key === 'Enter') verifyAdminPassword(); });
+        function adminLogout() { isAdminLoggedIn = false; renderProducts(); switchTab('shop'); }
+        function addNewProduct() {
+            if (!isAdminLoggedIn) return;
+            const name = document.getElementById('new-p-name').value.trim();
+            const priceText = document.getElementById('new-p-price').value;
+            const price = priceText === '' ? 0 : Number(priceText);
+            const file = document.getElementById('new-p-file').value.trim();
+            if (!name || !file || !Number.isFinite(price) || price < 0) { alert('نام، لینک فایل و قیمت معتبر را وارد کنید.'); return; }
+            products.push({ id: Date.now(), name, price, file });
+            saveProducts();
+            document.getElementById('new-p-name').value = '';
+            document.getElementById('new-p-price').value = '';
+            document.getElementById('new-p-file').value = '';
+            renderProducts(); alert('محصول اضافه شد.');
+        }
+        function renderAdminOrders() {
+            if (!isAdminLoggedIn) return;
+            const container = document.getElementById('admin-orders-list');
+            if (!orders.length) { container.innerHTML = '<p class="text-xs text-zinc-500 text-center py-4">هیچ سفارشی ثبت نشده است.</p>'; return; }
+            container.innerHTML = orders.map(o => `
+                <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
+                    <div class="flex justify-between items-center text-xs"><span class="font-bold">${o.id} - ${o.name}</span><span class="text-zinc-400">${o.date}</span></div>
+                    <p class="text-xs text-zinc-300">موبایل: ${o.phone} | مبلغ: ${o.total.toLocaleString()} تومان</p>
+                    <div class="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-zinc-800">
+                        <div class="flex items-center gap-2 flex-wrap"><span class="text-xs text-zinc-400">وضعیت: <b>${o.status}</b></span>${o.receipt ? `<button onclick="showReceipt('${o.id}')" class="text-[10px] bg-zinc-800 px-2 py-1 rounded text-zinc-200">مشاهده رسید</button>` : ''}</div>
+                        <div class="flex gap-1"><button onclick="updateOrderStatus('${o.id}', 'تایید شده')" class="bg-emerald-950 text-emerald-300 border border-emerald-900 px-2.5 py-1 rounded text-[10px]">تایید</button><button onclick="updateOrderStatus('${o.id}', 'رد شده')" class="bg-red-950 text-red-300 border border-red-900 px-2.5 py-1 rounded text-[10px]">رد</button></div>
+                    </div>
+                </div>`).join('');
+        }
+        function updateOrderStatus(id, status) {
+            if (!isAdminLoggedIn) return;
+            const order = orders.find(o => o.id === id);
+            if (order) { order.status = status; localStorage.setItem('skl_orders', JSON.stringify(orders)); renderAdminOrders(); }
+        }
+        function showReceipt(orderId) {
+            const order = orders.find(o => o.id === orderId);
+            if (!order || !order.receipt || !isAdminLoggedIn) return;
+            document.getElementById('receipt-preview-img').src = order.receipt;
+            document.getElementById('receipt-modal').classList.remove('hidden');
+        }
+        function closeReceiptModal() { document.getElementById('receipt-modal').classList.add('hidden'); document.getElementById('receipt-preview-img').src = ''; }
+        window.onload = init;
+    </script>
+</body>
+</html>
