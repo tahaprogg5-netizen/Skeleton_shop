@@ -114,7 +114,7 @@
           <textarea id="newDescription" class="field mb-3" placeholder="توضیحات محصول"></textarea>
           <input id="newPrice" type="number" min="0" class="field mb-3" placeholder="قیمت به تومان">
           <input id="newImage" class="field mb-3" placeholder="لینک تصویر (اختیاری)">
-          <input id="newDownload" class="field mb-3" placeholder="لینک تحویل محصول (اختیاری)">
+          
           <button class="btn primary" onclick="addProduct()">افزودن محصول</button>
         </div>
         <div class="panel p-5 mb-5">
@@ -236,7 +236,8 @@ async function trackOrder(){
  const {data,error}=await db.rpc("track_store_order",{p_order_code:code,p_customer_contact:contact});
  if(error||!data||!(Array.isArray(data)?data.length:true)){result.innerHTML='<p class="text-red-300">سفارشی با این کد و اطلاعات پیدا نشد.</p>';return;}
  const o=Array.isArray(data)?data[0]:data;const labels={pending:"در انتظار بررسی",approved:"تأیید شده",rejected:"رد شده",delivered:"تحویل شده"};
- result.innerHTML='<div class="panel p-4"><p>کد: <strong>'+esc(o.order_code||code)+'</strong></p><p class="mt-2">وضعیت: <strong class="text-purple-300">'+esc(labels[o.status]||o.status||"نامشخص")+'</strong></p><p class="mt-2">مبلغ: '+fmt(o.total_toman??o.total)+'</p>'+(o.delivery_url?'<a class="btn primary inline-block mt-4" href="'+esc(o.delivery_url)+'" target="_blank" rel="noopener noreferrer">دریافت محصول</a>':'')+'</div>';
+ const deliveryPath=o.delivery_file_path||null;const deliveryUrl=deliveryPath?db.storage.from("product-deliveries").getPublicUrl(deliveryPath).data.publicUrl:null;
+ result.innerHTML='<div class="panel p-4"><p>کد: <strong>'+esc(o.order_code||code)+'</strong></p><p class="mt-2">وضعیت: <strong class="text-purple-300">'+esc(labels[o.status]||o.status||"نامشخص")+'</strong></p><p class="mt-2">مبلغ: '+fmt(o.total_toman??o.total)+'</p>'+(deliveryUrl?'<a class="btn primary inline-block mt-4" href="'+esc(deliveryUrl)+'" target="_blank" rel="noopener noreferrer" download>دریافت فایل محصول</a>':'<p class="text-sm text-gray-400 mt-3">هنوز فایلی برای این سفارش ثبت نشده است.</p>')+'</div>';
 }
 async function loginAdmin(){
  const email=document.getElementById("adminEmail")?.value.trim(),password=document.getElementById("adminPassword").value;
@@ -265,13 +266,27 @@ function renderAdminProducts(list){
 function renderAdminOrders(orders){
  const el=document.getElementById("adminOrders"),labels={pending:"در انتظار بررسی",approved:"تأیید شده",rejected:"رد شده",delivered:"تحویل شده"};
  if(!orders.length){el.innerHTML='<p class="text-gray-400">هنوز سفارشی ثبت نشده.</p>';return;}
- el.innerHTML=orders.map(o=>'<article class="border border-white/10 rounded-xl p-4"><div class="flex flex-wrap justify-between gap-2"><strong>'+esc(o.order_code)+'</strong><span class="text-purple-300">'+fmt(o.total)+'</span></div><p class="text-sm text-gray-300 mt-2">'+esc(o.customer_name)+' · تلگرام: '+esc(o.customer_contact)+'</p><p class="text-sm text-gray-400 mt-1">'+new Date(o.created_at).toLocaleString("fa-IR")+'</p><p class="mt-2">وضعیت: '+esc(labels[o.status]||o.status)+'</p>'+(o.payment_reference?'<p class="text-sm mt-2">شماره پیگیری پرداخت: '+esc(o.payment_reference)+'</p>':'')+(o.receipt_path?'<button class="btn secondary mt-3" onclick="viewReceipt(\''+esc(o.receipt_path)+'\')">مشاهده رسید</button>':'<p class="text-xs text-gray-500 mt-2">رسیدی بارگذاری نشده.</p>')+'<div class="mt-4"><label class="block text-sm mb-2">لینک تحویل این سفارش</label><input id="delivery-'+esc(o.id)+'" class="field mb-2" value="'+esc(o.delivery_url||"")+'" placeholder="https://..."><button class="btn secondary" onclick="saveDeliveryLink(\''+o.id+'\')">ذخیره لینک تحویل</button></div><div class="flex flex-wrap gap-2 mt-3"><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'approved\')">تأیید</button><button class="btn secondary" onclick="changeStatus(\''+o.id+'\',\'rejected\')">رد</button><button class="btn primary" onclick="changeStatus(\''+o.id+'\',\'delivered\')">تحویل شد</button></div></article>').join("");
+ el.innerHTML=orders.map(o=>'<article class="border border-white/10 rounded-xl p-4"><div class="flex flex-wrap justify-between gap-2"><strong>'+esc(o.order_code)+'</strong><span class="text-purple-300">'+fmt(o.total)+'</span></div><p class="text-sm text-gray-300 mt-2">'+esc(o.customer_name)+' · تلگرام: '+esc(o.customer_contact)+'</p><p class="text-sm text-gray-400 mt-1">'+new Date(o.created_at).toLocaleString("fa-IR")+'</p><p class="mt-2">وضعیت: '+esc(labels[o.status]||o.status)+'</p>'+(o.payment_reference?'<p class="text-sm mt-2">شماره پیگیری پرداخت: '+esc(o.payment_reference)+'</p>':'')+(o.receipt_path?'<button class="btn secondary mt-3" onclick="viewReceipt(\\''+esc(o.receipt_path)+'\\')">مشاهده رسید پرداخت</button>':'<p class="text-xs text-gray-500 mt-2">رسیدی بارگذاری نشده.</p>')+'<div class="mt-4 rounded-lg border border-white/10 p-3"><label class="block text-sm mb-2">فایل تحویل محصول (مستقیم از دستگاه)</label><input id="delivery-file-'+esc(o.id)+'" type="file" class="field mb-2" accept=".zip,.7z,.pdf,.txt,.png,.jpg,.jpeg,.webp,.json,.docx"><p class="text-xs text-gray-500 mb-2">'+(o.delivery_file_path?'برای این سفارش فایل تحویل ثبت شده. انتخاب فایل جدید آن را جایگزین می‌کند.':'حداکثر حجم فایل: 50 مگابایت')+'</p><button class="btn secondary" onclick="uploadDeliveryFile(\\''+o.id+'\\')">بارگذاری فایل تحویل</button></div><div class="flex flex-wrap gap-2 mt-3"><button class="btn secondary" onclick="changeStatus(\\''+o.id+'\\',\\'approved\\')">تأیید</button><button class="btn secondary" onclick="changeStatus(\\''+o.id+'\\',\\'rejected\\')">رد</button><button class="btn primary" onclick="changeStatus(\\''+o.id+'\\',\\'delivered\\')">تحویل شد</button></div></article>').join("");
+}
+async function uploadDeliveryFile(orderId){
+ if(!adminUser){notify("ابتدا وارد پنل مدیریت شو.");return;}
+ const input=document.getElementById("delivery-file-"+orderId),file=input?.files?.[0];
+ if(!file){notify("اول فایل محصول را از دستگاه انتخاب کن.");return;}
+ if(file.size>50*1024*1024){notify("حجم فایل بیشتر از ۵۰ مگابایت است.");return;}
+ const safeName=(file.name||"product.bin").replace(/[^a-zA-Z0-9._-]/g,"_").slice(-100);
+ const path=orderId+"/"+Date.now()+"-"+safeName;
+ const {error:uploadError}=await db.storage.from("product-deliveries").upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});
+ if(uploadError){notify("بارگذاری فایل ناموفق بود: "+uploadError.message);return;}
+ const {error:updateError}=await db.from("orders").update({delivery_file_path:path,delivery_url:null}).eq("id",orderId);
+ if(updateError){notify("فایل بارگذاری شد اما ثبت آن برای سفارش ناموفق بود: "+updateError.message);return;}
+ notify("فایل تحویل بارگذاری و به سفارش وصل شد.");
+ await loadAdmin();
 }
 async function viewReceipt(path){const {data,error}=await db.storage.from("receipts").createSignedUrl(path,60);if(error){notify("نمایش رسید ممکن نیست: "+error.message);return;}window.open(data.signedUrl,"_blank","noopener");}
 async function addProduct(){
  if(!adminUser)return;const name=document.getElementById("newName").value.trim(),description=document.getElementById("newDescription").value.trim(),price=Number(document.getElementById("newPrice").value),image_url=document.getElementById("newImage").value.trim()||null,download_url=document.getElementById("newDownload").value.trim()||null;
  if(!name||!Number.isFinite(price)||price<0){notify("نام و قیمت معتبر وارد کن.");return;}
- const {error}=await db.from("products").insert({name,description,price:Math.round(price),image_url,download_url,active:true});
+ const {error}=await db.from("products").insert({name,description,price:Math.round(price),image_url,download_url:null,active:true});
  if(error){notify("افزودن محصول ناموفق بود: "+error.message);return;}
  ["newName","newDescription","newPrice","newImage","newDownload"].forEach(id=>document.getElementById(id).value="");notify("محصول اضافه شد.");await loadProducts();await loadAdmin();
 }
