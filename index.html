@@ -201,9 +201,9 @@
 </script>
 <script>
 
-const SUPABASE_URL = "https://diapjpkvqaseztvregrq.supabase.co";
-const SUPABASE_KEY = "sb_publishable_lQWWNGOGupsMxLPwPlsDag__GtZEdWZ";
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SUPABASE_URL = "https://pxttvztrproigvivwice.supabase.co";
+const SUPABASE_KEY = "sb_publishable_z1DYncujJTBvCLLWw6mVrg_mVzZtMaF";
+const db = window.supabase?.createClient ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 let products = [];
 let cart = JSON.parse(localStorage.getItem("skl_cart") || "[]");
 let adminUser = null;
@@ -267,6 +267,7 @@ async function renderCheckout(){
 
 async function loadSupportPayment(){
  const owner=document.getElementById("supportCardOwner"),number=document.getElementById("supportCardNumber");
+ if(!db){owner.textContent="اتصال پایگاه داده برقرار نشد";number.textContent="";return;}
  const {data,error}=await db.from("payment_settings").select("cardholder_name,card_number").eq("id",1).maybeSingle();
  if(error||!data){owner.textContent="اطلاعات کارت تنظیم نشده";number.textContent="";return;}
  paymentSettings=data;owner.textContent=data.cardholder_name||"—";number.textContent=data.card_number||"شماره کارت هنوز ثبت نشده";
@@ -459,7 +460,7 @@ async function savePaymentSettings(){
  if(error){notify("ذخیره تنظیمات ناموفق بود: "+error.message);return;}paymentSettings={card_number,cardholder_name};notify("تنظیمات پرداخت ذخیره شد.");
 }
 
-(async function init(){saveCart();await loadProducts();await loadSupportPayment();const {data}=await db.auth.getSession();if(data?.session){const u=data.session.user;const {data:ok}=await db.from("admin_users").select("user_id").eq("user_id",u.id).maybeSingle();if(ok){adminUser=u;document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");}}})();
+(async function init(){saveCart();if(!db){const grid=document.getElementById("productsGrid");if(grid)grid.innerHTML="<div class=\"panel p-5 text-red-300\">کتابخانه اتصال بارگذاری نشد؛ اینترنت یا دسترسی به CDN را بررسی کن.</div>";await loadSupportPayment();return;}await loadProducts();await loadSupportPayment();const {data}=await db.auth.getSession();if(data?.session){const u=data.session.user;const {data:ok}=await db.from("admin_users").select("user_id").eq("user_id",u.id).maybeSingle();if(ok){adminUser=u;document.getElementById("adminLogin").classList.add("hidden");document.getElementById("adminPanel").classList.remove("hidden");}}})();
 
 </script>
 </body>
